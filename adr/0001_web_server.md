@@ -46,7 +46,8 @@ We still choose to implement a server-side cache, so that the server is already 
 
 The server-side cache is a memory-bounded in-memory cache of SVG contents keyed by ID, implemented with [`moka`](https://crates.io/crates/moka) (`moka::future::Cache`) alongside the Axum server.
 The cache is bounded by total bytes, not by entry count, using a weigher, because SVG sizes vary widely.
-On a miss, the handler reads the SVG from disk and inserts it into the cache.
+On a miss, the handler reads the SVG from disk, computes its ETag (a BLAKE3 digest), and inserts both into the cache.
+The ETag is a digest of the SVG computed on a miss, not at build time. This keeps the build simple at a small runtime cost, and versioning the content (see Productionize) covers the same ground.
 
 In addition, we use headers to inform the client that this content will not change (Cache-Control and ETag).
 The client needs to understand these headers and cache SVGs locally.
@@ -62,3 +63,4 @@ Everything below is a future goal, not a commitment.
 3. Include the version in the URL or the ETag, so that cached SVGs don't go stale across releases.
 4. Replicate the web server for horizontal scaling. Each instance has its own cache, which is fine for immutable content.
 5. Put a CDN in front of the server if latency or bandwidth requires it. The Cache-Control and ETag headers already make this possible without code changes.
+6. Observe how the client-side and server-side caches are doing. Add probes for the number of responses without a body (client cache hits) and the number of requests that hit the server-side cache. This tells us if an assumption about the SVGs is not being honoured.
